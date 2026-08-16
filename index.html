@@ -410,6 +410,17 @@ async function abrirModalChatDirecto() {
 function cerrarInboxModal() {
     document.getElementById('inbox-modal').style.display = 'none';
 }
+function abrirChatModal(usuario) {
+    const chatModal = document.getElementById('chat-modal');
+    if (chatModal) {
+        document.getElementById('chat-usuario-titulo').innerText = `Chat con @${usuario}`;
+        chatModal.style.display = 'flex';
+    }
+}
+
+function cerrarChatModal() {
+    document.getElementById('chat-modal').style.display = 'none';
+}
          
 
     function suscribirCanalTyping(targetUsername) {
