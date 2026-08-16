@@ -251,7 +251,17 @@
     </div>
 </div>
     
-
+<!-- MODAL DE CHAT INDIVIDUAL -->
+<div id="chat-modal" class="modal" style="display: none;">
+    <div class="modal-content" style="max-width: 400px;">
+        <button class="close-modal" onclick="cerrarChatModal()">✕</button>
+        <h3 id="chat-usuario-titulo">Chat</h3>
+        <div id="chat-mensajes" style="height: 250px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px;"></div>
+        <input type="text" id="chat-input" placeholder="Escribe un mensaje..." style="width: 70%;">
+        <button onclick="enviarMensajeDirecto()">Enviar 📤</button>
+    </div>
+</div>
+    
                                            
      <script>
     const SUPABASE_URL = 'https://wwnpkmodmwwvdbrpymxl.supabase.co'; 
