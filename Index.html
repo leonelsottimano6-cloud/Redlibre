@@ -1,1 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RedLibre - Social..</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; display: flex; justify-content: center; transition: background-color 0.3s, color 0.3s; }
+        .container { width: 100%; max-width: 600px; background: white; min-height: 100vh; padding: 20px; box-sizing: border-box; border-left: 1px solid #ebeef0; border-right: 1px solid #ebeef0; position: relative; transition: background-color 0.3s, border-color 0.3s; }
+        
+        input, textarea, button { width: 100%; margin-bottom: 10px; padding: 12px; border-radius: 8px; border: 1px solid #cfd9de; box-sizing: border-box; font-size: 16px; font-family: inherit; }
+        textarea { resize: vertical; min-height: 80px; }
+        input:focus, textarea:focus { outline: none; border-color: #1d9bf0; }
+        
+        button { background-color: #1d9bf0; color: white; border: none; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        button:hover { background-color: #1a8cd8; }
+        button:disabled { background-color: #9cb4c4; cursor: not-allowed; }
+        
+        .btn-secondary { background-color: white; color: #1d9bf0; border: 1px solid #1d9bf0; }
+        .btn-secondary:hover { background-color: #e8f5fd; }
+        .btn-danger { background-color: #f4212e; color: white; }
+        .btn-danger:hover { background-color: #dc1e29; }
 
+        .btn-google { background-color: #ffffff; color: #3c4043; border: 1px solid #dadce0; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+        .btn-google:hover { background-color: #f8f9fa; border-color: #d2e3fc; }
+
+        #app-screen { display: none; }
+        
+        .nav-btn { width: auto; background-color: #0f1419; padding: 8px 14px; font-size: 14px; margin: 0; border-radius: 9999px; color: white; }
+        .nav-btn:hover { background-color: #272c30; }
+
+        .notif-item { padding: 10px 12px; border-bottom: 1px solid #ebeef0; font-size: 13px; color: #0f1419; }
+        .notif-item strong { color: #1d9bf0; }
+
+        .search-container { margin-top: 15px; margin-bottom: 15px; display: flex; gap: 8px; }
+        .search-container input { flex: 1; border-radius: 9999px; padding-left: 15px; background-color: #eff3f4; border: none; font-size: 14px; margin-bottom: 0; }
+        .search-container button { width: auto; margin-bottom: 0; border-radius: 9999px; padding: 8px 18px; font-size: 14px; }
+        
+        .post { border-bottom: 1px solid #ebeef0; padding: 15px 0; }
+        .post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .avatar-small { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background-color: #cfd9de; cursor: pointer; }
+        .post-author { font-weight: bold; color: #0f1419; cursor: pointer; }
+        .post-author:hover { text-decoration: underline; }
+        .post-author span { color: #536471; font-size: 14px; font-weight: normal; }
+        .post-content { color: #0f1419; word-wrap: break-word; white-space: pre-wrap; line-height: 1.5; margin-bottom: 10px; }
+        .post-image { width: 100%; max-height: 400px; object-fit: cover; border-radius: 12px; margin-bottom: 10px; }
+        
+        .post-actions { display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap; }
+        .action-btn { background: none; border: none; color: #536471; cursor: pointer; padding: 6px 10px; font-size: 14px; width: auto; display: inline-flex; align-items: center; gap: 5px; border-radius: 9999px; }
+        .action-btn:hover { background-color: #f0f2f5; }
+        .action-btn.liked { color: #f91880; }
+
+        .comments-section { margin-top: 10px; padding-left: 15px; border-left: 2px solid #ebeef0; }
+        .comment-item { background: #f8fafc; padding: 8px 12px; border-radius: 10px; margin-bottom: 6px; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+        .comment-author { font-weight: bold; color: #0f1419; margin-bottom: 2px; }
+        .comment-text { color: #333; margin: 0; word-wrap: break-word; white-space: pre-wrap; }
+        
+        .comment-actions-box { display: flex; align-items: center; gap: 4px; }
+        .comment-btn { background: none; border: none; cursor: pointer; font-size: 13px; color: #536471; width: auto; margin: 0; padding: 2px 4px; opacity: 0.8; }
+        .comment-btn:hover { opacity: 1; }
+        .comment-btn.liked { color: #f91880; opacity: 1; }
+
+        .comment-input-box { display: flex; gap: 8px; margin-top: 10px; }
+        .comment-input-box input { margin-bottom: 0; padding: 8px 12px; font-size: 14px; border-radius: 20px; }
+        .comment-input-box button { width: auto; margin-bottom: 0; padding: 8px 16px; font-size: 13px; border-radius: 20px; white-space: nowrap; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 25px; border-radius: 16px; width: 90%; max-width: 450px; max-height: 85vh; overflow-y: auto; position: relative; }
+        .close-modal { position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 20px; cursor: pointer; color: #536471; width: auto; }
+        .profile-card { text-align: center; margin-bottom: 15px; }
+        .avatar-large { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; background-color: #cfd9de; margin-bottom: 10px; border: 3px solid #1d9bf0; }
+
+        .stats-container { display: flex; justify-content: center; gap: 20px; font-size: 14px; color: #536471; margin: 10px 0 15px 0; }
+        .stats-container strong { color: #0f1419; }
+
+        .chat-box { display: flex; flex-direction: column; }
+        .chat-messages { flex: 1; min-height: 200px; max-height: 300px; overflow-y: auto; border: 1px solid #ebeef0; border-radius: 8px; padding: 10px; margin-bottom: 10px; background: #fafafa; display: flex; flex-direction: column; gap: 8px; }
+        .msg-bubble { max-width: 75%; padding: 8px 12px; border-radius: 15px; font-size: 14px; word-wrap: break-word; }
+        .msg-mine { align-self: flex-end; background-color: #1d9bf0; color: white; border-bottom-right-radius: 2px; }
+        .msg-other { align-self: flex-start; background-color: #e4e6eb; color: #0f1419; border-bottom-left-radius: 2px; }
+
+        /* MODO OSCURO */
+        body.dark-mode { background-color: #15202b; color: #f7f9f9; }
+        body.dark-mode .container { background-color: #15202b; border-color: #38444d; }
+        body.dark-mode .post, 
+        body.dark-mode .header-nav, 
+        body.dark-mode .comments-section, 
+        body.dark-mode .notif-item { border-color: #38444d; }
+        body.dark-mode .post-author, 
+        body.dark-mode .post-content, 
+        body.dark-mode .comment-author,
+        body.dark-mode #modal-username,
+        body.dark-mode .stats-container strong { color: #f7f9f9; }
+        body.dark-mode .post-author span, 
+        body.dark-mode #modal-bio, 
+        body.dark-mode .action-btn { color: #8b98a5; }
+        body.dark-mode input, 
+        body.dark-mode textarea { background-color: #1e2732; color: #f7f9f9; border-color: #38444d; }
+        body.dark-mode .search-container input { background-color: #1e2732; color: #f7f9f9; }
+        body.dark-mode .modal-content, 
+        body.dark-mode #notif-dropdown { background-color: #1e2732; color: #f7f9f9; border-color: #38444d; }
+        body.dark-mode .comment-item { background-color: #1e2732; color: #f7f9f9; }
+        body.dark-mode .comment-text { color: #d9d9d9; }
+        body.dark-mode .chat-messages { background-color: #15202b; border-color: #38444d; }
+        body.dark-mode .msg-other { background-color: #273340; color: #f7f9f9; }
+        body.dark-mode .action-btn:hover { background-color: #1e2732; }
+    </style>
+</head>
+  
