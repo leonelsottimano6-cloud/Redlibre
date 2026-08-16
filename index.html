@@ -276,7 +276,7 @@
     let activeChatUser = null;
     let typingChannel = null;
     let typingTimer = null;
-
+    let usuarioDestino = null; 
     function reproducirSonidoNotificacion() {
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -370,6 +370,31 @@
         }
         await verPerfil(targetUsername);
     }
+         function abrirChatModal(usuario) {
+    usuarioDestino = usuario;
+    document.getElementById('chat-usuario-titulo').innerText = `Chat con @${usuario}`;
+    document.getElementById('chat-modal').style.display = 'flex';
+         }
+         async function enviarMensajeDirecto() {
+    const input = document.getElementById('chat-input');
+    const contenido = input.value.trim();
+
+    if (!contenido || !usuarioDestino) return;
+
+    const { error } = await supabaseClient
+        .from('messages')
+        .insert([{ 
+            sender: currentEmail, 
+            receiver: usuarioDestino, 
+            content: contenido 
+        }]);
+
+    if (!error) {
+        input.value = ''; // Limpiamos la caja de texto ✨
+    } else {
+        console.error('Error al enviar:', error);
+    }
+         }
 // Abre el modal y carga la lista de contactos desde Supabase 🗄️
 async function abrirModalChatDirecto() {
     const modal = document.getElementById('inbox-modal');
