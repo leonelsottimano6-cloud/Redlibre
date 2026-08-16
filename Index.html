@@ -577,3 +577,378 @@
         chatBox.scrollTop = chatBox.scrollHeight;
     }
     
+    async function verPerfil(username) {
+        const modal = document.getElementById('profile-modal');
+        document.getElementById('modal-username').textContent = `@${username}`;
+        
+        const { data: profile } = await supabaseClient.from('profiles').select('*').eq('username', username).maybeSingle();
+        document.getElementById('modal-avatar').src = profile?.avatar_url || 'https://via.placeholder.com/90';
+        document.getElementById('modal-bio').textContent = profile?.bio || 'Sin biografía.';
+        
+        const { count: followersCount } = await supabaseClient.from('follows').select('*', { count: 'exact', head: true }).eq('following', username);
+        const { count: followingCount } = await supabaseClient.from('follows').select('*', { count: 'exact', head: true }).eq('follower', username);
+        
+        document.getElementById('modal-followers-count').textContent = followersCount || 0;
+        document.getElementById('modal-following-count').textContent = followingCount || 0;
+
+        const actionBox = document.getElementById('profile-action-btns');
+        actionBox.innerHTML = '';
+
+        if (username === currentEmail) {
+            document.getElementById('edit-profile-section').style.display = 'block';
+            document.getElementById('bio-text').value = profile?.bio || '';
+        } else {
+            document.getElementById('edit-profile-section').style.display = 'none';
+            
+            const { data: isFollowing } = await supabaseClient.from('follows').select('*').eq('follower', currentEmail).eq('following', username).maybeSingle();
+
+            const followBtn = document.createElement('button');
+            followBtn.className = isFollowing ? 'btn-danger' : '';
+            followBtn.style.borderRadius = '9999px';
+            followBtn.style.width = 'auto';
+            followBtn.textContent = isFollowing ? 'Dejar de seguir' : 'Seguir';
+            followBtn.onclick = () => toggleSeguir(username);
+
+            const chatBtn = document.createElement('button');
+            chatBtn.className = 'btn-secondary';
+            chatBtn.style.borderRadius = '9999px';
+            chatBtn.style.width = 'auto';
+            chatBtn.textContent = '💬 Mensaje';
+            chatBtn.onclick = () => { cerrarModalPerfil(); abrirChatModal(username); };
+
+            actionBox.appendChild(followBtn);
+            actionBox.appendChild(chatBtn);
+        }
+
+        const userPostsFeed = document.getElementById('user-posts-feed');
+        userPostsFeed.innerHTML = '';
+        const userPosts = currentPosts.filter(p => p.author === username);
+
+        userPosts.forEach(p => {
+            const item = document.createElement('div');
+            item.style.padding = '8px 0';
+            item.style.borderBottom = '1px solid #ebeef0';
+            item.style.fontSize = '14px';
+            item.textContent = p.content;
+            userPostsFeed.appendChild(item);
+        });
+
+        modal.style.display = 'flex';
+    }
+
+    function cerrarModalPerfil() { document.getElementById('profile-modal').style.display = 'none'; }
+
+    async function crearNotificacion(recipient, type, postId) {
+        if (!recipient || recipient === currentEmail) return;
+        await supabaseClient.from('notifications').insert([{ recipient, actor: currentEmail, type, post_id: postId, is_read: false }]);
+    }
+
+    async function cargarNotificaciones() {
+        if (!currentEmail) return;
+        const { data: notifs } = await supabaseClient.from('notifications').select('*').eq('recipient', currentEmail).order('created_at', { ascending: false });
+        const listContainer = document.getElementById('notif-list');
+        const badge = document.getElementById('notif-badge');
+
+        if (!notifs || notifs.length === 0) {
+            listContainer.innerHTML = '<p style="text-align: center; color: #536471; font-size: 13px; padding: 10px;">Sin notificaciones</p>';
+            badge.style.display = 'none';
+            return;
+        }
+
+        const sinLeer = notifs.filter(n => !n.is_read).length;
+        badge.textContent = sinLeer;
+        badge.style.display = sinLeer > 0 ? 'inline-block' : 'none';
+
+        listContainer.innerHTML = '';
+        notifs.forEach(n => {
+            let texto = 'interactuó contigo.';
+            if (n.type === 'like_post') texto = 'le dio me gusta a tu publicación.';
+            if (n.type === 'reply_post') texto = 'respondió a tu publicación.';
+            if (n.type === 'like_comment') texto = 'le dio me gusta a tu comentario.';
+            if (n.type === 'follow') texto = 'comenzó a seguirte.';
+
+            const item = document.createElement('div');
+            item.className = 'notif-item';
+            item.style.backgroundColor = n.is_read ? 'white' : '#e8f5fd';
+            item.innerHTML = `<strong>@${n.actor}</strong> ${texto}`;
+            listContainer.appendChild(item);
+        });
+    }
+
+    function toggleNotificacionesDropdown() {
+        const drop = document.getElementById('notif-dropdown');
+        drop.style.display = drop.style.display === 'block' ? 'none' : 'block';
+    }
+
+    async function marcarTodoComoLeido() {
+        await supabaseClient.from('notifications').update({ is_read: true }).eq('recipient', currentEmail);
+        await cargarNotificaciones();
+    }
+
+    function buscarPosts() {
+        const query = document.getElementById('search-input').value.toLowerCase().trim();
+        const postsElements = document.querySelectorAll('.post');
+        currentPosts.forEach((post, index) => {
+            const match = post.content.toLowerCase().includes(query) || post.author.toLowerCase().includes(query);
+            if (postsElements[index]) postsElements[index].style.display = match ? 'block' : 'none';
+        });
+    }
+
+    async function crearPost() {
+        const text = document.getElementById('post-text').value.trim();
+        const fileInput = document.getElementById('post-file');
+        const btn = document.getElementById('btn-publicar');
+        if (!text && fileInput.files.length === 0) return;
+
+        btn.disabled = true;
+        let imageUrl = null;
+
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            const fileName = `${Date.now()}_${Math.random()}.${file.name.split('.').pop()}`;
+            const { error } = await supabaseClient.storage.from('post-images').upload(fileName, file);
+            if (error) {
+                alert('No se pudo subir la imagen: ' + error.message);
+                btn.disabled = false;
+                return;
+            }
+
+            const { data } = supabaseClient.storage.from('post-images').getPublicUrl(fileName);
+            imageUrl = data.publicUrl;
+        }
+
+        const { error } = await supabaseClient.from('posts').insert([{
+            author: currentEmail,
+            content: text,
+            image_url: imageUrl,
+            likes: []
+        }]);
+
+        if (error) {
+            alert('No se pudo publicar: ' + error.message);
+        } else {
+            document.getElementById('post-text').value = '';
+            fileInput.value = '';
+            await cargarPosts();
+        }
+
+        btn.disabled = false;
+    }
+
+    async function toggleLike(postId) {
+        const post = currentPosts.find(p => p.id == postId);
+        if (!post) return;
+
+        let likesArray = post.likes || [];
+        const index = likesArray.indexOf(currentEmail);
+
+        if (index === -1) {
+            likesArray.push(currentEmail);
+            await crearNotificacion(post.author, 'like_post', postId);
+        } else {
+            likesArray.splice(index, 1);
+        }
+
+        await supabaseClient.from('posts').update({ likes: likesArray }).eq('id', postId);
+        await cargarPosts();
+    }
+
+    async function enviarComentario(postId) {
+        const input = document.getElementById(`comment-input-${postId}`);
+        const text = input.value.trim();
+        if (!text) return;
+
+        const post = currentPosts.find(p => p.id == postId);
+        const { error } = await supabaseClient.from('comments').insert([{ post_id: postId, author: currentEmail, content: text, likes: [] }]);
+        if (!error) {
+            if (post) await crearNotificacion(post.author, 'reply_post', postId);
+            await cargarPosts();
+        }
+    }
+
+    async function editarComentario(commentId, contenidoActual) {
+        const nuevoTexto = prompt("Edita tu comentario:", contenidoActual);
+        if (nuevoTexto === null || nuevoTexto.trim() === "" || nuevoTexto === contenidoActual) return;
+        await supabaseClient.from('comments').update({ content: nuevoTexto.trim() }).eq('id', commentId);
+        await cargarPosts();
+    }
+
+    async function eliminarComentario(commentId) {
+        if (!confirm("¿Seguro que deseas eliminar este comentario?")) return;
+        await supabaseClient.from('comments').delete().eq('id', commentId);
+        await cargarPosts();
+    }
+
+    async function toggleLikeComentario(commentId, postId) {
+        const comment = allComments.find(c => c.id == commentId);
+        if (!comment) return;
+
+        let likesArray = comment.likes || [];
+        const index = likesArray.indexOf(currentEmail);
+
+        if (index === -1) {
+            likesArray.push(currentEmail);
+            await crearNotificacion(comment.author, 'like_comment', postId);
+        } else {
+            likesArray.splice(index, 1);
+        }
+
+        await supabaseClient.from('comments').update({ likes: likesArray }).eq('id', commentId);
+        await cargarPosts();
+    }
+
+    async function cargarPosts() {
+        const feedContainer = document.getElementById('feed');
+        const { data: posts, error: postsError } = await supabaseClient.from('posts').select('*').order('created_at', { ascending: false });
+        const { data: profiles, error: profilesError } = await supabaseClient.from('profiles').select('*');
+        const { data: comments, error: commentsError } = await supabaseClient.from('comments').select('*').order('created_at', { ascending: true });
+
+        if (postsError || profilesError || commentsError) {
+            feedContainer.innerHTML = `<p style="text-align:center;color:#f4212e;">
+                No se pudieron cargar las publicaciones.
+            </p>`;
+            console.error('Error cargando feed:', { postsError, profilesError, commentsError });
+            return;
+        }
+
+        if (!posts) return;
+
+        userProfilesCache = {};
+        if (profiles) profiles.forEach(p => userProfilesCache[p.username] = p);
+
+        currentPosts = posts;
+        allComments = comments || [];
+        feedContainer.innerHTML = ''; 
+
+        posts.forEach(post => {
+            const postDiv = document.createElement('div');
+            postDiv.className = 'post';
+            
+            const fechaFormateada = new Date(post.created_at).toLocaleDateString() + ' ' + new Date(post.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const likes = post.likes || [];
+            const dioLike = likes.includes(currentEmail);
+            let imageHTML = post.image_url ? `<img src="${post.image_url}" class="post-image" alt="Imagen">` : '';
+
+            const userProfile = userProfilesCache[post.author];
+            const avatarUrl = (userProfile && userProfile.avatar_url) ? userProfile.avatar_url : 'https://via.placeholder.com/40';
+            const postComments = allComments.filter(c => c.post_id === post.id);
+
+            // Permisos de Modificación (Admin O Autor del Post)
+            const esAdminOAutor = (currentEmail === ADMIN_USER) || (post.author === currentEmail);
+            let botonesAdmin = '';
+            
+            if (esAdminOAutor) {
+                botonesAdmin = `
+                    <button class="action-btn" title="Editar publicación" onclick="editarPost(${post.id}, \`${post.content.replace(/`/g, '\\`')}\`)">✏️</button>
+                    <button class="action-btn" title="Eliminar publicación" onclick="eliminarPost(${post.id})">🗑️</button>
+                `;
+            }
+
+            let commentsHTML = '';
+            postComments.forEach(c => {
+                const commentLikes = c.likes || [];
+                const dioLikeComment = commentLikes.includes(currentEmail);
+                
+                // Permisos de Comentario (Admin O Autor del Comentario)
+                const esMiComentarioOAdmin = (c.author === currentEmail) || (currentEmail === ADMIN_USER);
+
+                let botonesEdicion = esMiComentarioOAdmin ? `
+                    <button class="comment-btn" title="Editar" onclick="editarComentario(${c.id}, \`${c.content.replace(/`/g, '\\`')}\`)">✏️</button>
+                    <button class="comment-btn" title="Borrar" onclick="eliminarComentario(${c.id})">🗑️</button>
+                ` : '';
+
+                commentsHTML += `
+                    <div class="comment-item" data-content="${escapeHtml(c.content)}">
+                        <div>
+                            <div class="comment-author">@${c.author}</div>
+                            <div class="comment-text">${escapeHtml(c.content)}</div>
+                        </div>
+                        <div class="comment-actions-box">
+                            <button class="comment-btn ${dioLikeComment ? 'liked' : ''}" onclick="toggleLikeComentario(${c.id}, ${post.id})">
+                                ${dioLikeComment ? '❤️' : '🤍'} ${commentLikes.length}
+                            </button>
+                            ${botonesEdicion}
+                        </div>
+                    </div>
+                `;
+            });
+
+            postDiv.innerHTML = `
+                <div class="post-header">
+                    <img src="${avatarUrl}" class="avatar-small" onclick="verPerfil('${post.author}')" alt="Avatar">
+                    <div class="post-author" onclick="verPerfil('${post.author}')">
+                        @${post.author} <span>· ${fechaFormateada}</span>
+                    </div>
+                </div>
+                <div class="post-content"></div>
+                ${imageHTML}
+                <div class="post-actions">
+                    <button class="action-btn ${dioLike ? 'liked' : ''}" onclick="toggleLike(${post.id})">
+                        ${dioLike ? '❤️' : '🤍'} ${likes.length}
+                    </button>
+                    <button class="action-btn">
+                        💬 ${postComments.length} Respuestas
+                    </button>
+                    ${botonesAdmin}
+                </div>
+
+                <div class="comments-section">
+                    <div class="comments-list">${commentsHTML}</div>
+                    <div class="comment-input-box">
+                        <input type="text" id="comment-input-${post.id}" placeholder="Escribe una respuesta...">
+                        <button onclick="enviarComentario(${post.id})">Responder</button>
+                    </div>
+                </div>
+            `;
+            
+            postDiv.querySelector('.post-content').textContent = post.content;
+            feedContainer.appendChild(postDiv);
+        });
+
+        buscarPosts(); 
+    }
+
+    function escapeHtml(text) {
+        return String(text ?? '')
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    async function guardarPerfil() {
+        const avatarInput = document.getElementById('avatar-file');
+        const bioText = document.getElementById('bio-text').value.trim();
+        let avatarUrl = userProfilesCache[currentEmail]?.avatar_url || null;
+
+        if (avatarInput.files.length > 0) {
+            const file = avatarInput.files[0];
+            const fileName = `avatar_${currentEmail}_${Date.now()}.${file.name.split('.').pop()}`;
+            const { error } = await supabaseClient.storage.from('post-images').upload(fileName, file);
+            if (error) {
+                alert('No se pudo subir el avatar: ' + error.message);
+                return;
+            }
+
+            const { data } = supabaseClient.storage.from('post-images').getPublicUrl(fileName);
+            avatarUrl = data.publicUrl;
+        }
+
+        const { error } = await supabaseClient.from('profiles').upsert({
+            username: currentEmail,
+            avatar_url: avatarUrl,
+            bio: bioText
+        });
+
+        if (error) {
+            alert('No se pudo guardar el perfil: ' + error.message);
+            return;
+        }
+
+        cerrarModalPerfil();
+        await cargarPosts();
+    }
+</script>
+</body>
+</html>
